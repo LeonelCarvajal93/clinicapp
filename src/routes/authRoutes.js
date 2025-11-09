@@ -1,10 +1,15 @@
-// src/routes/authRoutes.js
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 
-// Definimos la ruta POST para el registro de usuarios
-// Endpoint: POST /api/auth/register
+// @route   POST /api/auth/register
+// @desc    Registrar un nuevo usuario
+// @access  Public
 router.post('/register', authController.registerUser);
+
+// @route   POST /api/auth/login
+// @desc    Autenticar usuario y obtener token
+// @access  Public
+router.post('/login', authController.loginUser); // ¡Ruta de login añadida!
 
 module.exports = router;
