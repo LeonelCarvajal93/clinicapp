@@ -1,7 +1,7 @@
-// src/models/User.js
+// Archivo: backend/src/models/User.js
+
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/database');
-const Role = require('./Role'); // Importamos el modelo Role
 
 const User = sequelize.define('User', {
     user_id: {
@@ -10,41 +10,33 @@ const User = sequelize.define('User', {
         autoIncrement: true,
     },
     email: {
-        type: DataTypes.STRING(255),
+        type: DataTypes.STRING(100),
         allowNull: false,
-        unique: true, // El email debe ser único para el login
+        unique: true,
+        validate: {
+            isEmail: true,
+        }
     },
-    password_hash: {
-        type: DataTypes.STRING(255),
+    password: {
+        type: DataTypes.STRING,
         allowNull: false,
     },
     first_name: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.STRING(50),
         allowNull: false,
     },
     last_name: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.STRING(50),
         allowNull: false,
     },
-    role_id: {
-        type: DataTypes.INTEGER,
+    role: {
+        type: DataTypes.ENUM('ADMIN', 'DOCTOR', 'NURSE', 'PATIENT_MANAGER'),
         allowNull: false,
-        references: { // Creamos la relación (clave foránea) con la tabla Roles
-            model: Role, 
-            key: 'role_id',
-        }
-    },
-    is_active: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: true,
-    },
+        defaultValue: 'NURSE' 
+    }
 }, {
-    tableName: 'Users', // Nombre exacto de la tabla en PostgreSQL
-    timestamps: true, // Sequelize añadirá automáticamente createdAt y updatedAt
+    tableName: 'Users', 
+    timestamps: true,
 });
-
-// Definir explícitamente la relación en Sequelize
-User.belongsTo(Role, { foreignKey: 'role_id' });
-Role.hasMany(User, { foreignKey: 'role_id' });
 
 module.exports = User;

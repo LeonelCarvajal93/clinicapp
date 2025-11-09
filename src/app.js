@@ -1,19 +1,23 @@
+// Archivo: backend/src/app.js
+
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const { connectDB } = require('./config/database'); // Importamos la conexión a BD
-const db = require('./models'); // Importamos el nuevo 'index' de modelos para la sincronización
+const db = require('./models'); // Importamos el index de modelos para la sincronización
 
 // Importamos las rutas de autenticación
 const authRoutes = require('./routes/authRoutes'); 
+// NUEVA LÍNEA: Importamos las rutas del módulo de Pacientes
+const patientRoutes = require('./routes/patientRoutes'); 
 
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware básicos de Express
-app.use(express.json()); // Permite a Express leer cuerpos JSON
-app.use(cors()); // Permite peticiones desde el frontend
+app.use(express.json()); 
+app.use(cors()); 
 
 // Ruta de prueba
 app.get('/', (req, res) => {
@@ -21,8 +25,10 @@ app.get('/', (req, res) => {
 });
 
 // Middleware para usar las rutas de autenticación
-// Todas las peticiones a /api/auth/ serán manejadas por authRoutes
 app.use('/api/auth', authRoutes);
+
+// NUEVA LÍNEA: Middleware para usar las rutas de pacientes
+app.use('/api/patients', patientRoutes);
 
 // Función principal de inicio: 1. Conectar a BD, 2. Sincronizar Modelos, 3. Iniciar Servidor
 const startServer = async () => {
@@ -31,8 +37,8 @@ const startServer = async () => {
         await connectDB(); 
 
         // 2. Sincronizar modelos con la BD (crea las tablas si no existen)
-        // Usamos 'false' para no borrar los datos en cada inicio.
         await db.syncModels(false); 
+        console.log("Modelos sincronizados con la BD.");
 
         // 3. Iniciar el servidor Express
         app.listen(PORT, () => {
@@ -41,7 +47,6 @@ const startServer = async () => {
 
     } catch (err) {
         console.error("Fallo al iniciar la aplicación:", err);
-        // Salir de la aplicación si hay un fallo crítico (ej. la BD no está encendida)
         process.exit(1); 
     }
 };
