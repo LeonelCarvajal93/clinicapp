@@ -1,35 +1,73 @@
-// Archivo: backend/src/middleware/authMiddleware.js
 const jwt = require('jsonwebtoken');
 
-// El secreto debe ser el mismo que el usado en authController.js y debe estar en .env
-const jwtSecret = process.env.JWT_SECRET || 'SECRETO_POR_DEFECTO_MALA_PRACTICA'; 
+/**
+ * Middleware para validar el token JWT en las peticiones seguras.
+ * Busca el token en el encabezado estándar 'Authorization: Bearer <token>'
+ */
+const authMiddleware = (req, res, next) => {
+    // 1. Obtener el valor del header 'Authorization'
+    const authHeader = req.header('Authorization');
 
-// Esta función se ejecuta antes de que se acceda a una ruta protegida
-module.exports = function (req, res, next) {
-    // 1. Obtener el token del encabezado (header)
-    // El token generalmente se envía como 'Bearer <token_string>'
-    const token = req.header('x-auth-token');
-
-    // 2. Verificar si no hay token
-    if (!token) {
-        // 401: Unauthorized (No autorizado, requiere autenticación)
+    // 2. Verificar si el header Authorization está presente
+    if (!authHeader) {
         return res.status(401).json({ msg: 'No hay token, autorización denegada' });
     }
 
-    try {
-        // 3. Verificar el token usando el secreto
-        // jwt.verify() decodifica el token y comprueba si la firma es válida
-        const decoded = jwt.verify(token, jwtSecret);
+    // 3. Verificar el formato 'Bearer TOKEN' y extraer solo el token
+    const parts = authHeader.split(' ');
+    
+    if (parts.length !== 2 || parts[0].toLowerCase() !== 'bearer') {
+        return res.status(401).json({ msg: 'Formato de token no válido. Use el formato: Bearer [token]' });
+    }
 
-        // 4. Adjuntar la información del usuario al objeto de la solicitud (req)
-        // Esto permite a las funciones de ruta saber quién hizo la solicitud (id y rol).
+    const token = parts[1]; // El token es la segunda parte del array
+
+    // 4. Verificar el token
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        
+        // Adjuntar los datos decodificados (id y role) del token a la petición
         req.user = decoded.user;
         
-        // 5. Continuar al siguiente middleware o a la función de la ruta
+        // 5. Continuar al siguiente middleware (roleMiddleware o el controlador)
         next();
-        
+
     } catch (err) {
-        // Si el token es inválido (expirado, modificado, etc.)
-        res.status(401).json({ msg: 'Token no es válido' });
+        // Esto se ejecuta si el token es inválido o ha expirado
+        console.error("Error al verificar token:", err.message);
+        res.status(401).json({ msg: 'Token no válido o ha expirado' });
     }
+};
+
+// -------------------------------------------------------------
+// ESTA FUNCIÓN ESTÁ SEPARADA DE LA ANTERIOR (EL ARREGLO)
+// -------------------------------------------------------------
+
+/**
+ * Middleware para verificar si el rol del usuario autenticado 
+ * está incluido en la lista de roles permitidos.
+ * @param {Array<string>} roles - Array de roles permitidos.
+ */
+function roleMiddleware(roles) {
+    return (req, res, next) => {
+        // req.user viene de authMiddleware
+        if (!req.user || !req.user.role) {
+            return res.status(401).json({ msg: 'Acceso denegado. No se encontró información de rol.' });
+        }
+
+        // Convertir el rol del usuario a mayúsculas para asegurar la comparación
+        const userRole = req.user.role.toUpperCase();
+
+        // Verificar si el rol del usuario está en la lista de roles permitidos
+        if (!roles.includes(userRole)) {
+            return res.status(403).json({ msg: 'Permiso denegado. Su rol no tiene acceso a esta función.' });
+        }
+        next();
+    };
+}
+
+
+module.exports = {
+    authMiddleware,
+    roleMiddleware
 };

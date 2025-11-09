@@ -1,30 +1,25 @@
 // Archivo: backend/src/middleware/roleMiddleware.js
 
 /**
- * Middleware que verifica si el rol del usuario autenticado
- * está incluido en la lista de roles permitidos.
- * @param {string[]} allowedRoles - Un array de strings con los roles permitidos (ej: ['ADMIN', 'DOCTOR'])
+ * Middleware para restringir el acceso basado en el rol del usuario.
+ * @param {Array<string>} roles - Roles permitidos para acceder a la ruta (ej: ['ADMIN', 'NURSE'])
  */
-exports.permit = (allowedRoles) => {
+module.exports = function (roles) {
     return (req, res, next) => {
-        // El rol y el ID del usuario se adjuntan a 'req.user' en el authMiddleware
-        const userRole = req.user && req.user.role; 
-
-        if (!userRole) {
-            // Este caso no debería ocurrir si authMiddleware funciona
-            return res.status(500).json({ msg: "Error de servidor: No se pudo verificar el rol del usuario." });
+        // 1. Verificar si el objeto de usuario está adjunto a la petición (proviene de authMiddleware)
+        if (!req.user || !req.user.role) {
+            return res.status(401).json({ msg: 'Acceso denegado. Rol de usuario no encontrado.' });
         }
 
-        if (allowedRoles.includes(userRole)) {
-            // Si el rol está permitido, continúa con la ruta
-            next();
-        } else {
-            // Si el rol no está en la lista
-            res.status(403).json({ 
-                msg: "Acceso denegado. No tiene permisos suficientes para realizar esta acción.",
-                required_roles: allowedRoles,
-                user_role: userRole
-            });
+        const userRole = req.user.role.toUpperCase();
+
+        // 2. Verificar si el rol del usuario está incluido en el array de roles permitidos
+        if (!roles.includes(userRole)) {
+            // 403: Forbidden (Prohibido, el usuario está autenticado pero no tiene permiso)
+            return res.status(403).json({ msg: 'Permiso denegado. Su rol no tiene acceso a esta función.' });
         }
+
+        // 3. Si el rol está permitido, continuar con el siguiente middleware/controlador
+        next();
     };
 };

@@ -37,7 +37,7 @@ const startServer = async () => {
         await connectDB(); 
 
         // 2. Sincronizar modelos con la BD (crea las tablas si no existen)
-        await db.syncModels(false); 
+        await db.sequelize.sync({ alter: true });
         console.log("Modelos sincronizados con la BD.");
 
         // 3. Iniciar el servidor Express

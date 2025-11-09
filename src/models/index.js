@@ -1,47 +1,62 @@
-// Archivo: backend/src/models/index.js (CORREGIDO)
+const fs = require('fs');
+const path = require('path');
+const Sequelize = require('sequelize');
 
-const { sequelize } = require('../config/database');
+// CONFIGURACIÓN DE RUTA (Verificado como correcto: sube 1 nivel a src, entra a config)
+const env = process.env.NODE_ENV || 'development';
+const config = require(__dirname + '/../config/config.json')[env];
 
-// 1. Importar todos los modelos (Aseguramos que la ruta sea relativa)
-const User = require('./User');
-const Role = require('./Role'); 
-const Patient = require('./Patient'); 
+const db = {};
 
-// 2. Definir las Asociaciones (Relaciones)
+// INICIALIZAR SEQUELIZE
+let sequelize;
+if (config.use_env_variable) {
+  sequelize = new Sequelize(process.env[config.use_env_variable], config);
+} else {
+  sequelize = new Sequelize(config.database, config.username, config.password, config);
+}
 
-// Un User (Doctor/Admin) registra a muchos Patient
-User.hasMany(Patient, {
-    foreignKey: 'registered_by_user_id', 
-    as: 'registeredPatients', // Alias para incluir en consultas
-});
+// CARGAR MODELOS (Adaptado a tu estilo de definición directa: sequelize.define)
+fs.readdirSync(__dirname)
+  .filter(file => {
+    return (
+      file.indexOf('.') !== 0 &&
+      file !== path.basename(__filename) &&
+      file.slice(-3) === '.js'
+    );
+  })
+  .forEach(file => {
+    // REQUIERE el modelo y lo agrega a la colección 'db'
+    // Como tus modelos usan sequelize.define(), requerirlos devuelve el objeto Model.
+    const model = require(path.join(__dirname, file)); 
+    db[model.name] = model;
+  });
 
-// Un Patient solo puede ser registrado por un User
-Patient.belongsTo(User, {
-    foreignKey: 'registered_by_user_id',
-    as: 'registeredBy', // Alias para incluir en consultas
-});
 
-// 3. Definir un objeto contenedor para exportar todo lo necesario.
-const db = {
-    sequelize,
-    User,
-    Role,
-    Patient, // Exportamos el modelo Patient
-};
+// ASOCIACIONES (Resuelve el error 'no existe la columna registeredBy.id')
 
-/**
- * Función para sincronizar modelos con la base de datos (crear tablas si no existen)
- * @param {boolean} force - Si es true, BORRA y RECREA todas las tablas. Usar con cautela.
- */
-db.syncModels = async (force = false) => {
-    try {
-        await sequelize.sync({ force: force });
-        console.log("Modelos sincronizados y BD actualizada.");
-
-    } catch (error) {
-        console.error("Error al sincronizar modelos:", error);
-        throw error;
+// Itera sobre todos los modelos cargados y aplica las asociaciones
+Object.keys(db).forEach(modelName => {
+    // Si el modelo es Patient o User, define explícitamente la asociación
+    if (db[modelName].associate) {
+        db[modelName].associate(db);
     }
-};
+});
+
+// Definición explícita de la asociación crítica (User <-> Patient)
+// User tiene muchos Patients (registeredBy)
+db.User.hasMany(db.Patient, {
+  foreignKey: 'registered_by_user_id',
+  as: 'registeredBy' 
+});
+
+// Patient pertenece a un User (el que lo registró)
+db.Patient.belongsTo(db.User, {
+  foreignKey: 'registered_by_user_id',
+  as: 'registeredBy' 
+});
+
+db.sequelize = sequelize;
+db.Sequelize = Sequelize;
 
 module.exports = db;

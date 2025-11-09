@@ -1,83 +1,117 @@
-// Archivo: backend/src/controllers/patientController.js (Versión Simple para Lectura)
-const db = require('../models');
-const Patient = db.Patient;
-const User = db.User; 
-const { Op } = require('sequelize');
+const { Patient, User } = require('../models');
 
-// Función para registrar un nuevo paciente
-exports.createPatient = async (req, res) => {
-    // El 'registered_by_user_id' se obtiene del token JWT verificado en el middleware
-    const registered_by_user_id = req.user.id; 
-    const { 
-        first_name, last_name, birth_date, gender, 
-        phone, address, emergency_contact_name, 
-        emergency_contact_phone, blood_type 
-    } = req.body;
-
+// Función para obtener todos los pacientes (GET /api/patients)
+exports.getAllPatients = async (req, res) => {
     try {
-        const patient = await Patient.create({
-            first_name, last_name, birth_date, gender, 
-            phone, address, emergency_contact_name, 
-            emergency_contact_phone, blood_type, 
-            registered_by_user_id // Asignado automáticamente
-        });
-        
-        // Excluimos la clave foránea del resultado para una respuesta limpia
-        const responsePatient = patient.toJSON();
-        delete responsePatient.registered_by_user_id;
-
-        res.status(201).json({ 
-            msg: 'Paciente registrado exitosamente.', 
-            patient: responsePatient 
-        });
-
-    } catch (error) {
-        console.error("Error al crear paciente:", error);
-        res.status(500).json({ 
-            msg: 'Error del servidor al registrar paciente.',
-            details: error.message 
-        });
-    }
-};
-
-// Función para obtener todos los pacientes o buscar por nombre
-exports.getPatients = async (req, res) => {
-    // Permite buscar por nombre o apellido
-    const { search } = req.query; 
-
-    try {
-        let whereClause = {};
-
-        if (search) {
-            // Utilizamos el operador OR de Sequelize para buscar en ambos campos
-            whereClause = {
-                [Op.or]: [
-                    { first_name: { [Op.iLike]: `%${search}%` } }, // Búsqueda insensible a mayúsculas
-                    { last_name: { [Op.iLike]: `%${search}%` } }
-                ]
-            };
-        }
-
         const patients = await Patient.findAll({
-            where: whereClause,
-            // Incluimos información del usuario que lo registró para contexto
+            // Incluimos la información del usuario que lo registró (Necesario para el GET)
             include: [{
                 model: User,
                 as: 'registeredBy',
-                attributes: ['user_id', 'first_name', 'last_name', 'role', 'email'] // Solo información relevante
-            }],
-            attributes: { exclude: ['registered_by_user_id'] } // Excluimos la clave foránea
+                attributes: ['id', 'first_name', 'last_name', 'email', 'role']
+            }]
         });
-
         res.status(200).json(patients);
-
     } catch (error) {
-        console.error("Error al obtener pacientes:", error);
-        res.status(500).json({ 
-            msg: 'Error del servidor al obtener listado de pacientes.',
-            details: error.message 
-        });
+        console.error('Error al obtener pacientes:', error);
+        res.status(500).json({ msg: 'Error interno del servidor al obtener pacientes.' });
     }
 };
 
-// Nota: Aquí se añadirían funciones para getPatientById, updatePatient, y deletePatient.
+// Función para crear un nuevo paciente (POST /api/patients)
+exports.createPatient = async (req, res) => {
+    try {
+        // El ID del usuario que registra se obtiene del token (req.user.id)
+        const patientData = {
+            ...req.body,
+            registered_by_user_id: req.user.id // Correcto: Usamos el ID del usuario autenticado
+        };
+
+        const newPatient = await Patient.create(patientData);
+
+        // [CORRECCIÓN CRÍTICA]: Eliminamos el include y la recarga en el POST.
+        // El error "registeredBy.id" surge porque Sequelize no puede mapear
+        // correctamente la inclusión 'registeredBy' al devolver el resultado.
+        
+        res.status(201).json({
+            msg: "Paciente registrado exitosamente.",
+            patient: newPatient // Devolvemos el paciente simple, sin la asociación cargada
+        });
+    } catch (error) {
+        console.error('Error al registrar paciente:', error);
+        res.status(500).json({ msg: 'Error interno del servidor al registrar paciente.', details: error.message });
+    }
+};
+
+// Función para obtener un paciente por ID (GET /api/patients/:id)
+exports.getPatientById = async (req, res) => {
+    try {
+        const patient = await Patient.findByPk(req.params.id, {
+            // Incluimos la asociación, ya que esta ruta lo necesita
+            include: [{
+                model: User,
+                as: 'registeredBy',
+                attributes: ['id', 'first_name', 'last_name', 'email', 'role']
+            }]
+        });
+
+        if (!patient) {
+            return res.status(404).json({ msg: 'Paciente no encontrado.' });
+        }
+        res.status(200).json(patient);
+    } catch (error) {
+        console.error('Error al obtener paciente por ID:', error);
+        res.status(500).json({ msg: 'Error interno del servidor.' });
+    }
+};
+
+
+// Función para actualizar un paciente (PUT /api/patients/:id)
+exports.updatePatient = async (req, res) => {
+    try {
+        // Ejecutar la actualización (UPDATE)
+        const [updatedRowsCount] = await Patient.update(req.body, {
+            where: { patient_id: req.params.id }
+        });
+
+        if (updatedRowsCount === 0) {
+            return res.status(404).json({ msg: 'Paciente no encontrado o no se realizaron cambios.' });
+        }
+
+        // 2. Recargar el paciente actualizado para la respuesta.
+        // [CORRECCIÓN CRÍTICA]: Eliminamos el include en la recarga del PUT 
+        // para evitar el error "registeredBy.id".
+        const updatedPatient = await Patient.findByPk(req.params.id);
+        
+        if (!updatedPatient) {
+            return res.status(404).json({ msg: 'Paciente no encontrado después de la actualización.' });
+        }
+
+
+        res.status(200).json({
+            msg: "Paciente actualizado exitosamente.",
+            patient: updatedPatient // Devolvemos el paciente simple, sin la asociación cargada
+        });
+    } catch (error) {
+        console.error('Error al actualizar paciente:', error);
+        res.status(500).json({ msg: 'Error interno del servidor al actualizar paciente.', details: error.message });
+    }
+};
+
+// Función para eliminar un paciente (DELETE /api/patients/:id)
+exports.deletePatient = async (req, res) => {
+    try {
+        const deletedRows = await Patient.destroy({
+            where: { patient_id: req.params.id }
+        });
+
+        if (deletedRows === 0) {
+            return res.status(404).json({ msg: 'Paciente no encontrado.' });
+        }
+
+        res.status(200).json({ msg: 'Paciente eliminado exitosamente.' });
+    } catch (error) {
+        console.error('Error al eliminar paciente:', error);
+        res.status(500).json({ msg: 'Error interno del servidor al eliminar paciente.' });
+    }
+};
