@@ -1,55 +1,71 @@
-// Archivo: backend/src/models/Patient.js
-
 const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const db = require('../config/database'); // Importación directa de la instancia de Sequelize
+const User = require('./user');
 
-const Patient = sequelize.define('Patient', {
+const Patient = db.define('Patient', {
     patient_id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
-        autoIncrement: true,
+        autoIncrement: true
     },
     first_name: {
-        type: DataTypes.STRING(50),
-        allowNull: false,
+        type: DataTypes.STRING,
+        allowNull: false
     },
     last_name: {
-        type: DataTypes.STRING(50),
-        allowNull: false,
+        type: DataTypes.STRING,
+        allowNull: false
     },
     birth_date: {
-        type: DataTypes.DATEONLY, // Solo fecha (YYYY-MM-DD)
+        type: DataTypes.DATEONLY,
         allowNull: false,
+        validate: {
+            isDate: true,
+        }
     },
+    // CORRECCIÓN CRÍTICA: Se añaden los valores 'M' y 'F' para que el registro funcione.
     gender: {
-        type: DataTypes.ENUM('Masculino', 'Femenino', 'Otro'),
-        allowNull: false,
+        type: DataTypes.ENUM('M', 'F', 'OTHER', 'O'), 
+        allowNull: false
     },
-    phone: {
-        type: DataTypes.STRING(20),
-        allowNull: true,
+    phone_number: {
+        type: DataTypes.STRING,
+        allowNull: true
     },
     address: {
-        type: DataTypes.STRING(255),
-        allowNull: true,
+        type: DataTypes.STRING,
+        allowNull: true
     },
     emergency_contact_name: {
-        type: DataTypes.STRING(100),
-        allowNull: true,
+        type: DataTypes.STRING,
+        allowNull: true
     },
     emergency_contact_phone: {
-        type: DataTypes.STRING(20),
-        allowNull: true,
+        type: DataTypes.STRING,
+        allowNull: true
     },
     blood_type: {
-        type: DataTypes.STRING(5),
+        type: DataTypes.STRING,
         allowNull: true,
+        validate: {
+            isIn: [['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']]
+        }
     },
-    // Clave Foránea (FK) se añade automáticamente con la asociación en index.js
-    // registered_by_user_id: { ... }
+    registered_by_user_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: {
+            model: User, 
+            key: 'user_id'
+        }
+    }
 }, {
-    tableName: 'Patients', 
-    timestamps: true,
+    tableName: 'Patients',
+    timestamps: true
 });
+
+// Definir la asociación
+Patient.belongsTo(User, { foreignKey: 'registered_by_user_id', as: 'RegisteredBy' });
+User.hasMany(Patient, { foreignKey: 'registered_by_user_id', as: 'RegisteredPatients' });
 
 module.exports = Patient;

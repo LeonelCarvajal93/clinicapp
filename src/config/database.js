@@ -1,4 +1,3 @@
-// src/config/database.js
 const { Sequelize } = require('sequelize');
 const dotenv = require('dotenv');
 dotenv.config();
@@ -10,7 +9,7 @@ const sequelize = new Sequelize(
     {
         host: process.env.DB_HOST,
         port: process.env.DB_PORT,
-        dialect: 'postgres', // El tipo de BD que usas
+        dialect: 'postgres', 
         logging: false,
     }
 );
@@ -24,4 +23,6 @@ const connectDB = async () => {
     }
 };
 
-module.exports = { sequelize, connectDB };
+// CORRECCIÓN: Exportar la instancia de Sequelize directamente
+module.exports = sequelize;
+// Si necesita acceder a connectDB en otro lado, use: module.exports.connectDB = connectDB

@@ -1,73 +1,54 @@
 const jwt = require('jsonwebtoken');
+const db = require('../models');
+const User = db.User;
 
-/**
- * Middleware para validar el token JWT en las peticiones seguras.
- * Busca el token en el encabezado estándar 'Authorization: Bearer <token>'
- */
-const authMiddleware = (req, res, next) => {
-    // 1. Obtener el valor del header 'Authorization'
-    const authHeader = req.header('Authorization');
+const authMiddleware = async (req, res, next) => {
+    let token;
 
-    // 2. Verificar si el header Authorization está presente
-    if (!authHeader) {
-        return res.status(401).json({ msg: 'No hay token, autorización denegada' });
+    // 1. Verificar si el token existe y tiene formato Bearer
+    if (
+        req.headers.authorization &&
+        req.headers.authorization.startsWith('Bearer')
+    ) {
+        try {
+            // Extraer el token (quitar "Bearer ")
+            token = req.headers.authorization.split(' ')[1];
+
+            // 2. Verificar el token usando process.env.JWT_SECRET (la clave CLAVE_SECRETA)
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            
+            // 3. Buscar el usuario por ID dentro del token
+            // CRÍTICO: El token decodificado contiene el ID del usuario (decoded.id)
+            req.user = await User.findByPk(decoded.id, {
+                attributes: { exclude: ['password'] }
+            });
+
+            // 4. Si no se encuentra el usuario, devuelve un error específico
+            if (!req.user) {
+                // Este error ocurre si el token es VÁLIDO pero el ID de usuario no existe en la BD
+                return res.status(401).json({ 
+                    msg: 'Error de Autenticación: Usuario no encontrado en la base de datos.',
+                    details: 'El ID dentro del token no corresponde a un usuario activo.'
+                });
+            }
+
+            // Si todo está bien (token válido y usuario encontrado), pasamos al controlador
+            next();
+
+        } catch (error) {
+            // Este bloque maneja 'invalid token', 'jwt expired', y errores de firma.
+            console.error('Error de autenticación:', error.message);
+            // Devolvemos el 401 que usted ha estado viendo
+            return res.status(401).json({ 
+                msg: 'Error: Token fallido o expirado.', 
+                details: error.message 
+            });
+        }
     }
-
-    // 3. Verificar el formato 'Bearer TOKEN' y extraer solo el token
-    const parts = authHeader.split(' ');
-    
-    if (parts.length !== 2 || parts[0].toLowerCase() !== 'bearer') {
-        return res.status(401).json({ msg: 'Formato de token no válido. Use el formato: Bearer [token]' });
-    }
-
-    const token = parts[1]; // El token es la segunda parte del array
-
-    // 4. Verificar el token
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        
-        // Adjuntar los datos decodificados (id y role) del token a la petición
-        req.user = decoded.user;
-        
-        // 5. Continuar al siguiente middleware (roleMiddleware o el controlador)
-        next();
-
-    } catch (err) {
-        // Esto se ejecuta si el token es inválido o ha expirado
-        console.error("Error al verificar token:", err.message);
-        res.status(401).json({ msg: 'Token no válido o ha expirado' });
+     else {
+        // Si no hay token en el header
+        return res.status(401).json({ msg: 'Error: No se proporcionó token de autorización.' });
     }
 };
 
-// -------------------------------------------------------------
-// ESTA FUNCIÓN ESTÁ SEPARADA DE LA ANTERIOR (EL ARREGLO)
-// -------------------------------------------------------------
-
-/**
- * Middleware para verificar si el rol del usuario autenticado 
- * está incluido en la lista de roles permitidos.
- * @param {Array<string>} roles - Array de roles permitidos.
- */
-function roleMiddleware(roles) {
-    return (req, res, next) => {
-        // req.user viene de authMiddleware
-        if (!req.user || !req.user.role) {
-            return res.status(401).json({ msg: 'Acceso denegado. No se encontró información de rol.' });
-        }
-
-        // Convertir el rol del usuario a mayúsculas para asegurar la comparación
-        const userRole = req.user.role.toUpperCase();
-
-        // Verificar si el rol del usuario está en la lista de roles permitidos
-        if (!roles.includes(userRole)) {
-            return res.status(403).json({ msg: 'Permiso denegado. Su rol no tiene acceso a esta función.' });
-        }
-        next();
-    };
-}
-
-
-module.exports = {
-    authMiddleware,
-    roleMiddleware
-};
+module.exports = authMiddleware;

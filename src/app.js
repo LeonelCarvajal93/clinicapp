@@ -1,55 +1,52 @@
-// Archivo: backend/src/app.js
+require('dotenv').config(); // CRÍTICO: Cargar .env primero
 
 const express = require('express');
-const dotenv = require('dotenv');
-const cors = require('cors');
-const { connectDB } = require('./config/database'); // Importamos la conexión a BD
-const db = require('./models'); // Importamos el index de modelos para la sincronización
+const bodyParser = require('body-parser');
+const db = require('./models');
+const authRoutes = require('./routes/authRoutes');
+const patientRoutes = require('./routes/patientRoutes');
+const { errorHandler } = require('./middleware/errorMiddleware');
 
-// Importamos las rutas de autenticación
-const authRoutes = require('./routes/authRoutes'); 
-// NUEVA LÍNEA: Importamos las rutas del módulo de Pacientes
-const patientRoutes = require('./routes/patientRoutes'); 
-
-dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware básicos de Express
-app.use(express.json()); 
-app.use(cors()); 
+// Middleware
+app.use(bodyParser.json());
+app.use(express.urlencoded({ extended: false }));
 
-// Ruta de prueba
-app.get('/', (req, res) => {
-    res.send('API de Clínica Médica Funcionando');
-});
-
-// Middleware para usar las rutas de autenticación
-app.use('/api/auth', authRoutes);
-
-// NUEVA LÍNEA: Middleware para usar las rutas de pacientes
-app.use('/api/patients', patientRoutes);
-
-// Función principal de inicio: 1. Conectar a BD, 2. Sincronizar Modelos, 3. Iniciar Servidor
-const startServer = async () => {
+// Conexión a la base de datos y sincronización de modelos
+const connectDB = async () => {
     try {
-        // 1. Conectar a la base de datos
-        await connectDB(); 
+        await db.sequelize.authenticate();
+        console.log('Conexión a la base de datos establecida exitosamente.');
+        await db.sequelize.sync({ alter: true }); // Sincroniza modelos
+        console.log('Modelos sincronizados con la BD.');
+        
+        // Verificación de carga de secreto (para diagnóstico)
+        if (process.env.JWT_SECRET) {
+            console.log(`JWT Secret Cargado: ${process.env.JWT_SECRET}`);
+        } else {
+             // Si el secreto no carga, detenemos la ejecución y mostramos un error CLARO.
+             console.error('ERROR CRÍTICO: JWT_SECRET no está cargado. Verifique su archivo .env');
+             process.exit(1); 
+        }
 
-        // 2. Sincronizar modelos con la BD (crea las tablas si no existen)
-        await db.sequelize.sync({ alter: true });
-        console.log("Modelos sincronizados con la BD.");
-
-        // 3. Iniciar el servidor Express
-        app.listen(PORT, () => {
-            console.log(`Servidor corriendo en el puerto ${PORT}`);
-        });
-
-    } catch (err) {
-        console.error("Fallo al iniciar la aplicación:", err);
-        process.exit(1); 
+    } catch (error) {
+        console.error('No se pudo conectar/sincronizar la BD:', error);
+        process.exit(1);
     }
 };
 
-// Llamada para arrancar la aplicación
-startServer();
+// Rutas
+app.use('/api/auth', authRoutes);
+app.use('/api/patients', patientRoutes);
+
+// Manejador de errores personalizado
+app.use(errorHandler);
+
+// Iniciar servidor después de la conexión a la BD
+connectDB().then(() => {
+    app.listen(PORT, () => {
+        console.log(`Servidor corriendo en el puerto ${PORT}`);
+    });
+});

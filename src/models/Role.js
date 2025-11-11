@@ -1,21 +1,20 @@
-// src/models/Role.js
 const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const db = require('../config/database'); // IMPORTACIÓN DIRECTA de la instancia de Sequelize
 
-const Role = sequelize.define('Role', {
+const Role = db.define('Role', {
     role_id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
-        autoIncrement: true,
+        autoIncrement: true
     },
-    role_name: {
-        type: DataTypes.STRING(50),
+    name: {
+        type: DataTypes.STRING,
         allowNull: false,
-        unique: true,
+        unique: true
     }
 }, {
-    tableName: 'Roles', // Nombre exacto de la tabla en PostgreSQL
-    timestamps: false,  // Esta tabla es estática, no necesita fechas de creación/actualización
+    tableName: 'Roles',
+    timestamps: true
 });
 
 module.exports = Role;
